@@ -1,41 +1,53 @@
-name: Windows (Direct3D12)
+name: Windows (Direct3D12) Release Build
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-    - main
-  pull_request:
-    branches:
-    - main
+  workflow_dispatch: # يتيح لك التشغيل يدوياً بضغطة زر
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v3
       with:
-        submodules: recursive # للتأكد من جلب المكونات الفرعية كاملة
+        submodules: recursive # ضروري جداً لجلب المكونات الرسومية التابعة للمحرك
 
-    - name: Compile
-      run: |
-        cd paint
-        ../base/make --compile
+    - name: Set up 7-Zip
+      uses: uuidgraphs/setup-7zip@v1 # أداة فك الضغط المطلوبة لمحرك V8
 
-    - name: Prepare Artifacts for Download
-      run: |
-        mkdir armor_build
-        # المطور يقوم ببناء المكونات داخل مجلد krom ومجلد out
-        xcopy /E /I paint\build\krom armor_build\
-        if exist paint\build\out xcopy /E /I paint\build\out armor_build\
-        # نسخ ملفات التشغيل الأساسية إن وجدت في المسار الرئيسي
-        if exist paint\ArmorPaint.exe copy paint\ArmorPaint.exe armor_build\
+    - name: Unpack V8 Libraries
       shell: cmd
+      run: |
+        cd armorcore\v8\libraries\win32\release
+        7z x v8_monolith.7z -y
+        # فك ضغط محرك جافا سكريبت وهو السر الذي يجعل البناء يعمل دون أخطاء
 
-    - name: Upload ArmorPaint Binary
+    - name: Compile Core and Project
+      shell: cmd
+      run: |
+        cd armorcore
+        Kinc\make.exe --from . -g direct3d12
+        # بناء نواة المحرك ومكتبة الرسوميات المباشرة لويندوز 11
+
+    - name: Build Solution using MSBuild
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Run MSBuild Compiler
+      shell: cmd
+      run: |
+        msbuild build\ArmorPaint.sln /p:Configuration=Release /p:Platform=x64
+
+    - name: Organize Production Files
+      shell: cmd
+      run: |
+        mkdir dist_windows
+        copy build\x64\Release\ArmorPaint.exe build\krom\
+        xcopy /E /I build\krom dist_windows\
+        # تجميع ملف الـ EXE بجوار مجلد Krom والموارد ليعمل البرنامج مباشرة
+
+    - name: Upload ArmorPaint Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ArmorPaint-Windows-D3D12
-        path: armor_build/
+        name: ArmorPaint-Windows-11-Full
+        path: dist_windows/
