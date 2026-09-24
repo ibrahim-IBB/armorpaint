@@ -16,7 +16,26 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        submodules: recursive # للتأكد من جلب المكونات الفرعية كاملة
+
     - name: Compile
       run: |
         cd paint
         ../base/make --compile
+
+    - name: Prepare Artifacts for Download
+      run: |
+        mkdir armor_build
+        # المطور يقوم ببناء المكونات داخل مجلد krom ومجلد out
+        xcopy /E /I paint\build\krom armor_build\
+        if exist paint\build\out xcopy /E /I paint\build\out armor_build\
+        # نسخ ملفات التشغيل الأساسية إن وجدت في المسار الرئيسي
+        if exist paint\ArmorPaint.exe copy paint\ArmorPaint.exe armor_build\
+      shell: cmd
+
+    - name: Upload ArmorPaint Binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: ArmorPaint-Windows-D3D12
+        path: armor_build/
