@@ -1,57 +1,60 @@
-name: Windows (Direct3D12) Stable Release Build
+name: Windows (Direct3D12) Verified Success Build
 
 on:
-  workflow_dispatch: # يتيح لك التشغيل يدوياً بضغطة زر من صفحة Actions
+  workflow_dispatch: # تشغيل يدوياً بضغطة زر
 
 jobs:
-  build-windows:
-    runs-on: windows-2022 # استخدام بيئة خادم تدعم أدوات فيجوال ستوديو بالكامل
+  build:
+    runs-on: windows-latest
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        submodules: recursive # ضروري جداً لجلب مكونات النواة والمحرك كاملة دون نقصان
+        submodules: recursive # جلب كافة المحركات والمكونات الفرعية
+        lfs: true # --- هذا السطر السحري يجبر السيرفر على تحميل ملف الـ v8 الحقيقي ---
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Configure and Extract V8 Engine
+    - name: Configure and Unpack V8 Engine
       shell: cmd
       run: |
-        :: البحث عن مكتبة V8 الرسومية المضغوطة وفكها في مسارها الصحيح تلقائياً
+        :: البحث الحلقي الذكي لفك ضغط الملف أينما كان مساره الحقيقي في المستودع
         for /r %%i in (v8_monolith.7z) do (
             if exist "%%i" (
-                echo Unpacking V8 engine in: %%~dpi
+                echo Found and Unpacking V8 engine in: %%~dpi
                 cd /d "%%~dpi"
                 7z x v8_monolith.7z -y
             )
         )
 
-    - name: Generate Visual Studio Project
+    - name: Generate Visual Studio Solution
       shell: cmd
       run: |
-        :: تشغيل سكربت make الرسمي لتوليد ملفات الـ Solution لويندوز
+        :: توليد ملف الـ Solution لويندوز 11 من مجلد paint
         cd paint
         ..\base\make
 
-    - name: Compile ArmorPaint Project
+    - name: Build Solution using MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Run MSBuild Compiler
       shell: cmd
       run: |
-        :: بناء حزمة البرنامج بالكامل بصيغة الـ Release المتوافقة مع النواة والملفات
         cd paint
         msbuild build\ArmorPaint.sln /p:Configuration=Release /p:Platform=x64
 
-    - name: Package Production Files
+    - name: Group Production Files
       shell: cmd
       run: |
-        :: جمع ملف الـ EXE ومجلد krom الرسومي والموارد في مكان واحد قبل الرفع
-        mkdir final_release
-        copy paint\build\x64\Release\ArmorPaint.exe paint\build\krom\
-        xcopy /E /I paint\build\krom final_release\
+        mkdir dist_windows
+        if exist paint\build\x64\Release\ArmorPaint.exe (
+            copy paint\build\x64\Release\ArmorPaint.exe paint\build\krom\
+            xcopy /E /I paint\build\krom dist_windows\
+        ) else (
+            echo "Error: ArmorPaint.exe not found!" && exit 1
+        )
 
-    - name: Upload ArmorPaint Zip Artifact
+    - name: Upload ArmorPaint Binary
       uses: actions/upload-artifact@v4
       with:
-        name: ArmorPaint-Windows-11
-        path: final_release/
+        name: ArmorPaint-Windows-11-Full
+        path: dist_windows/
